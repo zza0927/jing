@@ -2,9 +2,12 @@ package main
 
 import (
 	"embed"
+	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/gin-gonic/gin"
@@ -21,9 +24,30 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 		router := gin.Default()
 		// func(c *gin.context) {}   c相当于c语言的指针，指向gin的上下文
-		router.GET("/", func(c *gin.Context) {
-			// 与nodejs不同，go语言使用的是流的方式，使用writer的形式制造response
-			c.String(http.StatusOK, "<h1>hello world</h1>")
+		// router.GET("/", func(c *gin.Context) {
+		// 	// 与nodejs不同，go语言使用的是流的方式，使用writer的形式制造response
+		// 	c.String(http.StatusOK, "<h1>hello world</h1>")
+		// })
+		// 静态文件转变量
+		staticFiles, _ := fs.Sub(FS, "frontend/dist")
+		router.StaticFS("/static", http.FS(staticFiles))
+		router.NoRoute(func(c *gin.Context) {
+			path := c.Request.URL.Path
+			if strings.HasPrefix(path, "/static/") {
+				reader, err := staticFiles.Open("index.html")
+				if err != nil {
+					log.Fatal(err)
+				}
+				//退出的时候执行 defer中的语句
+				defer reader.Close()
+				stat, err := reader.Stat()
+				if err != nil {
+					log.Fatal(err)
+				}
+				c.DataFromReader(http.StatusOK, stat.Size(), "text/html", reader, nil)
+			} else {
+				c.Status(http.StatusNotFound)
+			}
 		})
 		router.Run(":8888")
 	}()
@@ -41,7 +65,7 @@ func main() {
 	// 初始值为nil
 	// fmt.Printf("%v\n", ui)
 	//locra.New 返回两个值，忽略第二个值
-	ui, _ = lorca.New("http://127.0.0.1:8888/", "", 800, 600, "--disable-sync", "--disable-translate")
+	ui, _ = lorca.New("http://127.0.0.1:8888/static/index.html", "", 800, 600, "--disable-sync", "--disable-translate")
 	// 创建一个频道，监听操作系统的信号。
 	chSingal := make(chan os.Signal, 1)
 	// 通知，中断和终止信号。
